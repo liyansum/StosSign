@@ -70,9 +70,9 @@ public final class Authentication {
         )
         
         guard let c = responseDictionary["c"] as? String,
-              let salt = responseDictionary["s"] as? Data,
+              let salt = StosSignResponseDecoder.data(responseDictionary["s"]),
               let iterations = responseDictionary["i"] as? Int,
-              let serverPublicKey = responseDictionary["B"] as? Data
+              let serverPublicKey = StosSignResponseDecoder.data(responseDictionary["B"])
         else {
             throw URLError(.badServerResponse)
         }
@@ -103,8 +103,8 @@ public final class Authentication {
             anisetteData: anisetteData
         )
         
-        guard let serverVerificationMessage = verificationResponse["M2"] as? Data,
-              let serverDictionary = verificationResponse["spd"] as? Data,
+        guard let serverVerificationMessage = StosSignResponseDecoder.data(verificationResponse["M2"]),
+              let serverDictionary = StosSignResponseDecoder.data(verificationResponse["spd"]),
               let statusDictionary = verificationResponse["Status"] as? [String: Any]
         else {
             throw URLError(.badServerResponse)
@@ -118,14 +118,11 @@ public final class Authentication {
             throw AppleAPIError.authenticationHandshakeFailed
         }
         
-        guard let decryptedDictionary = try PropertyListSerialization.propertyList(
-            from: decryptedData,
-            format: nil
-        ) as? [String: Any],
+        guard let decryptedDictionary = StosSignResponseDecoder.dictionary(from: decryptedData),
               let dsid = decryptedDictionary["adsid"] as? String,
               let idmsToken = decryptedDictionary["GsIdmsToken"] as? String
         else {
-            throw URLError(.badServerResponse)
+            throw AppleAPIError.customError(code: 0, message: "The spd payload is neither a property list nor JSON: \(StosSignResponseDecoder.describe(decryptedData))")
         }
         
         context.dsid = dsid
@@ -173,8 +170,8 @@ public final class Authentication {
             )
             
         default:
-            guard let sessionKey = decryptedDictionary["sk"] as? Data,
-                  let c = decryptedDictionary["c"] as? Data
+            guard let sessionKey = StosSignResponseDecoder.data(decryptedDictionary["sk"]),
+                  let c = StosSignResponseDecoder.data(decryptedDictionary["c"])
             else {
                 throw URLError(.badServerResponse)
             }
@@ -269,16 +266,13 @@ public final class Authentication {
         request.httpBody = bodyData
         httpHeaders.forEach { request.addValue($0.value, forHTTPHeaderField: $0.key) }
         
-        let (data, _) = try await AppleAPI.shared.session.data(for: request)
+        let (data, urlResponse) = try await AppleAPI.shared.session.data(for: request)
         
-        guard let responseDictionary = try PropertyListSerialization.propertyList(
-            from: data,
-            format: nil
-        ) as? [String: Any],
+        guard let responseDictionary = StosSignResponseDecoder.dictionary(from: data),
               let dictionary = responseDictionary["Response"] as? [String: Any],
               let status = dictionary["Status"] as? [String: Any]
         else {
-            throw URLError(.badServerResponse)
+            throw AppleAPIError.customError(code: 0, message: "The GsService2 response is neither a property list nor JSON: \(StosSignResponseDecoder.describe(data, response: urlResponse))")
         }
         
         let errorCode = status["ec"] as? Int ?? 0
@@ -352,7 +346,7 @@ public final class Authentication {
             anisetteData: anisetteData
         )
         
-        guard let encryptedToken = responseDictionary["et"] as? Data else {
+        guard let encryptedToken = StosSignResponseDecoder.data(responseDictionary["et"]) else {
             throw URLError(.badServerResponse)
         }
         
@@ -360,11 +354,8 @@ public final class Authentication {
             throw AppleAPIError.authenticationHandshakeFailed
         }
         
-        guard let tokensDictionary = try PropertyListSerialization.propertyList(
-            from: token,
-            format: nil
-        ) as? [String: Any] else {
-            throw URLError(.badServerResponse)
+        guard let tokensDictionary = StosSignResponseDecoder.dictionary(from: token) else {
+            throw AppleAPIError.customError(code: 0, message: "The app token payload is neither a property list nor JSON: \(StosSignResponseDecoder.describe(token))")
         }
         
         guard let appTokens = tokensDictionary["t"] as? [String: Any],
@@ -416,13 +407,10 @@ public final class Authentication {
         )
         verifyRequest.allHTTPHeaderFields?["security-code"] = code
         
-        let (data, _) = try await AppleAPI.shared.session.data(for: verifyRequest)
+        let (data, urlResponse) = try await AppleAPI.shared.session.data(for: verifyRequest)
         
-        guard let responseDictionary = try PropertyListSerialization.propertyList(
-            from: data,
-            format: nil
-        ) as? [String: Any] else {
-            throw URLError(.badServerResponse)
+        guard let responseDictionary = StosSignResponseDecoder.dictionary(from: data) else {
+            throw AppleAPIError.customError(code: 0, message: "The verification response is neither a property list nor JSON: \(StosSignResponseDecoder.describe(data, response: urlResponse))")
         }
         
         let errorCode = responseDictionary["ec"] as? Int ?? 0

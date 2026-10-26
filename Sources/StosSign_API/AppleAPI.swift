@@ -630,7 +630,7 @@ public final class AppleAPI: Sendable {
             request.setValue(value, forHTTPHeaderField: key)
         }
         
-        let (data, _) = try await self.session.data(for: request)
+        let (data, response) = try await self.session.data(for: request)
         
         if json {
             guard let responseDictionary = try JSONSerialization.jsonObject(with: data, options: []) as? [String: Any] else {
@@ -639,8 +639,8 @@ public final class AppleAPI: Sendable {
             
             return responseDictionary
         } else {
-            guard let responseDictionary = try PropertyListSerialization.propertyList(from: data, options: [], format: nil) as? [String: Any] else {
-                throw AppleAPIError.badServerResponse
+            guard let responseDictionary = StosSignResponseDecoder.dictionary(from: data) else {
+                throw AppleAPIError.customError(code: 0, message: "Unexpected response: \(StosSignResponseDecoder.describe(data, response: response))")
             }
             
             return responseDictionary
@@ -700,10 +700,10 @@ public final class AppleAPI: Sendable {
             request.setValue(value, forHTTPHeaderField: key)
         }
         
-        let (data, _) = try await self.session.data(for: request)
+        let (data, response) = try await self.session.data(for: request)
         
-        guard let responseDictionary = try PropertyListSerialization.propertyList(from: data, options: [], format: nil) as? [String: Any] else {
-            throw AppleAPIError.badServerResponse
+        guard let responseDictionary = StosSignResponseDecoder.dictionary(from: data) else {
+            throw AppleAPIError.customError(code: 0, message: "Unexpected response: \(StosSignResponseDecoder.describe(data, response: response))")
         }
         
         return responseDictionary
